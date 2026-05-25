@@ -1,0 +1,10 @@
+{
+  "name": "NeuroSync AI",
+  "description": "Real-Time AI Speech Recognition, Multilingual Translation, and Robo Voice Dictation with a futuristic glassmorphism UI.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
