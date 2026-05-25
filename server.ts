@@ -236,7 +236,7 @@ Text: "${text}"`;
         }
 
         if (!hasError && response && response.text) {
-          translatedText = response.text.trim();
+          translatedText = "⚡ " + response.text.trim();
           usedModel = 'gemini';
         }
       }
@@ -254,7 +254,7 @@ Text: "${text}"`;
           const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
           const gtData = await gtRes.json();
           if (gtData && gtData[0]) {
-            translatedText = gtData[0].map((x: any) => x[0]).join('');
+            translatedText = "⚡ " + gtData[0].map((x: any) => x[0]).join('');
             usedModel = 'google-translate-free';
           }
         } catch (e) {
@@ -265,9 +265,9 @@ Text: "${text}"`;
       if (!translatedText) {
         const simulatedResult = getFallbackTranslation(text, targetLanguage);
         return res.json({ 
-          translatedText: simulatedResult,
+          translatedText: `[DIAG]: failed to translate text. Gemini model error check. ` + simulatedResult,
           isSimulated: true,
-          note: 'Offline fallback used. Provide a valid XAI_API_KEY or GEMINI_API_KEY.'
+          note: `All translation API attempts failed.`
         });
       }
 
@@ -275,12 +275,12 @@ Text: "${text}"`;
         translatedText: translatedText,
         model: usedModel
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Translation server-side crash caught successfully:', error);
       // Ensure zero crash/failure
       const simulatedResult = getFallbackTranslation(req.body?.text || '', req.body?.targetLanguage || 'Tamil');
       res.json({ 
-        translatedText: simulatedResult,
+        translatedText: `[CRASH]: ${error.message} ` + simulatedResult,
         isSimulated: true
       });
     }
