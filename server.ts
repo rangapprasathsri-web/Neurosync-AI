@@ -241,7 +241,7 @@ Text: "${text}"`;
         }
       }
 
-      // 3. Try Offline Fallback if both failed
+      // 3. Try Auto-Translate Fallback if both failed
       if (!translatedText) {
         try {
           const langMapIso: Record<string, string> = {
@@ -251,16 +251,14 @@ Text: "${text}"`;
           };
           const isoTarget = langMapIso[targetLanguage.toLowerCase()] || 'en';
           
-          const myMemRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=Autodetect|${isoTarget}`);
-          const myMemData = await myMemRes.json();
-          console.log("MyMemory response:", myMemData?.responseData?.translatedText?.substring(0, 50));
-          // MyMemory puts match in responseData
-          if (myMemData?.responseData?.translatedText && !myMemData.responseData.translatedText.includes('MYMEMORY WARNING')) {
-            translatedText = myMemData.responseData.translatedText;
-            usedModel = 'mymemory-free';
+          const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
+          const gtData = await gtRes.json();
+          if (gtData && gtData[0]) {
+            translatedText = gtData[0].map((x: any) => x[0]).join('');
+            usedModel = 'google-translate-free';
           }
         } catch (e) {
-          console.error("MyMemory fallback failed", e);
+          console.error("Google Translate fallback failed", e);
         }
       }
 
