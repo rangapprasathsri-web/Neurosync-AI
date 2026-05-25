@@ -170,10 +170,22 @@ export const useSpeechRecognition = (language: string, onFinalTranscript: (text:
       }
       setInterimTranscript('');
     } else {
-      // Direct call to startRecognition - webkitSpeechRecognition will ask for permissions natively
-      setIsListening(true);
-      isListeningRef.current = true;
-      startRecognition();
+      // Ask for mic permissions via standard getUserMedia first.
+      // This is necessary because webkitSpeechRecognition sometimes fails to request permissions in iframes
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Immediately stop tracks, we just needed the permission grant
+        stream.getTracks().forEach(track => track.stop());
+        
+        setIsListening(true);
+        isListeningRef.current = true;
+        startRecognition();
+      } catch (err: any) {
+        console.error('Microphone permission denied:', err);
+        setIsListening(false);
+        isListeningRef.current = false;
+        setMicError(`Permission error: ${err.message}. Please allow microphone access.`);
+      }
     }
   }, [isListening, startRecognition]);
 

@@ -1,6 +1,8 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
+import * as googleTTS from 'google-tts-api';
 import path from 'path';
 import 'dotenv/config';
 
@@ -110,6 +112,23 @@ async function startServer() {
       goodbye: "さようなら",
       bye: "またね"
     },
+    malayalam: {
+      hello: "നമസ്കാരം",
+      hi: "നമസ്കാരം",
+      "how are you": "നിങ്ങൾക്ക് സുഖമാണോ?",
+      "how are you?": "നിങ്ങൾക്ക് സുഖമാണോ?",
+      "good morning": "സുപ്രഭാതം",
+      "good morning!": "സുപ്രഭാതം",
+      "thank you": "നന്ദി",
+      "thank you!": "നന്ദി",
+      thanks: "നന്ദി",
+      welcome: "സ്വാഗതം",
+      "welcome!": "സ്വാഗതം",
+      goodbye: "വിട",
+      bye: "വിട",
+      "what is your name?": "നിങ്ങളുടെ പേരെന്താണ്?",
+      "what is your name": "നിങ്ങളുടെ പേരെന്താണ്?"
+    },
     chinese: {
       hello: "你好",
       hi: "你好",
@@ -143,6 +162,7 @@ async function startServer() {
     if (targetLangLower === 'german') return `Hallo: "${text}"`;
     if (targetLangLower === 'japanese') return `こんにちは: "${text}"`;
     if (targetLangLower === 'chinese') return `你好: "${text}"`;
+    if (targetLangLower === 'malayalam') return `നമസ്കാരം: "${text}"`;
     
     return `${text}`;
   }
@@ -154,58 +174,85 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing text or targetLanguage' });
       }
 
-      if (!ai) {
-        // Return simulated offline dictionary-backed translation gracefully
-        const simulatedResult = getFallbackTranslation(text, targetLanguage);
-        return res.json({ 
-          translatedText: simulatedResult,
-          isSimulated: true,
-          note: 'Offline fallback used: Provide a valid GEMINI_API_KEY in the environment for full neural translation.'
-        });
-      }
-
       const prompt = `You are a professional real-time translator.
 Translate the following text to ${targetLanguage}. Maintain the original meaning and tone.
 Return ONLY the final translated text, with no markdown formatting.
 Text: "${text}"`;
 
-      const fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
-      let modelIndex = 0;
-      let response;
-      let currentModel = fallbackModels[modelIndex];
-      let hasError = false;
-      
-      while (modelIndex < fallbackModels.length) {
+      let translatedText = '';
+      let usedModel = '';
+
+      // 1. Try Grok (xAI) if configured
+      if (process.env.XAI_API_KEY && process.env.XAI_API_KEY !== 'MY_XAI_API_KEY') {
         try {
-          response = await ai.models.generateContent({
-            model: currentModel,
-            contents: prompt,
+          const openai = new OpenAI({
+            apiKey: process.env.XAI_API_KEY,
+            baseURL: "https://api.xai.com/v1",
           });
-          break; // Success
-        } catch (error: any) {
-          console.error(`Gemini call error on model ${currentModel}:`, error);
-          if (modelIndex < fallbackModels.length - 1) {
-            modelIndex++;
-            currentModel = fallbackModels[modelIndex];
-          } else {
-            hasError = true;
-            break;
+          const completion = await openai.chat.completions.create({
+            messages: [
+              { role: "system", content: "You are a professional real-time translator." },
+              { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
+            ],
+            model: "grok-2-latest",
+          });
+          
+          if (completion.choices[0]?.message?.content) {
+            translatedText = completion.choices[0].message.content.trim();
+            usedModel = 'grok';
           }
+        } catch (grokError) {
+          console.error('Grok translation error:', grokError);
+          // Fall down to Gemini
         }
       }
 
-      if (hasError || !response || !response.text) {
-        // Fallback gracefully on API errors as well
+      // 2. Try Gemini if Grok failed or is not configured
+      if (!translatedText && ai) {
+        const fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
+        let modelIndex = 0;
+        let response;
+        let currentModel = fallbackModels[modelIndex];
+        let hasError = false;
+        
+        while (modelIndex < fallbackModels.length) {
+          try {
+            response = await ai.models.generateContent({
+              model: currentModel,
+              contents: prompt,
+            });
+            break; // Success
+          } catch (error: any) {
+            console.error(`Gemini call error on model ${currentModel}:`, error);
+            if (modelIndex < fallbackModels.length - 1) {
+              modelIndex++;
+              currentModel = fallbackModels[modelIndex];
+            } else {
+              hasError = true;
+              break;
+            }
+          }
+        }
+
+        if (!hasError && response && response.text) {
+          translatedText = response.text.trim();
+          usedModel = 'gemini';
+        }
+      }
+
+      // 3. Try Offline Fallback if both failed
+      if (!translatedText) {
         const simulatedResult = getFallbackTranslation(text, targetLanguage);
         return res.json({ 
           translatedText: simulatedResult,
           isSimulated: true,
-          note: 'API error fallback used.'
+          note: 'Offline fallback used. Provide a valid XAI_API_KEY or GEMINI_API_KEY.'
         });
       }
 
       res.json({ 
-        translatedText: (response.text || '').trim()
+        translatedText: translatedText,
+        model: usedModel
       });
     } catch (error) {
       console.error('Translation server-side crash caught successfully:', error);
@@ -215,6 +262,40 @@ Text: "${text}"`;
         translatedText: simulatedResult,
         isSimulated: true
       });
+    }
+  });
+
+  app.post('/api/tts', async (req, res) => {
+    try {
+      const { text, targetLanguage } = req.body;
+      if (!text || !targetLanguage) {
+        return res.status(400).json({ error: 'Missing text or targetLanguage' });
+      }
+
+      const langMap: Record<string, string> = {
+        'Tamil': 'ta', 'Hindi': 'hi', 'Malayalam': 'ml', 'Marathi': 'mr',
+        'English': 'en', 'Telugu': 'te', 'Kannada': 'kn', 'Bengali': 'bn',
+        'Spanish': 'es', 'French': 'fr', 'German': 'de', 'Japanese': 'ja', 'Chinese': 'zh'
+      };
+
+      const activeLang = targetLanguage === 'Auto Detect' ? 'English' : targetLanguage;
+      const hintCode = langMap[activeLang] || activeLang.toLowerCase().substring(0, 2);
+
+      // Fetch audio from translation server-side into base64 format, preventing client CORS issues
+      const results = await googleTTS.getAllAudioBase64(text, {
+        lang: hintCode,
+        slow: false,
+        host: 'https://translate.google.com',
+        splitPunct: ',.?'
+      });
+      
+      // Construct valid base64 data URIs
+      const audioUrls = results.map((r: any) => `data:audio/mp3;base64,${r.base64}`);
+
+      res.status(200).json({ audioUrls });
+    } catch (error) {
+      console.error('TTS error:', error);
+      res.status(500).json({ error: 'Failed to generate speech' });
     }
   });
 
