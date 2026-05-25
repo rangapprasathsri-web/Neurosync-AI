@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from 'openai';
 import 'dotenv/config';
 
 const fallbackDictionary: Record<string, Record<string, string>> = {
@@ -144,61 +145,86 @@ export default async function handler(req: any, res: any) {
       return res.status(400).json({ error: 'Missing text or targetLanguage' });
     }
 
-    let ai: GoogleGenAI | null = null;
-    if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
-      ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    }
-
-    if (!ai) {
-      const simulatedResult = getFallbackTranslation(text, targetLanguage);
-      return res.status(200).json({ 
-        translatedText: simulatedResult,
-        isSimulated: true,
-        note: 'Offline fallback used: Provide a valid GEMINI_API_KEY in Vercel settings for full neural translation.'
-      });
-    }
-
     const prompt = `You are a professional real-time translator.
 Translate the following text to ${targetLanguage}. Maintain the original meaning and tone.
 Return ONLY the final translated text, with no markdown formatting.
 Text: "${text}"`;
 
-    const fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
-    let modelIndex = 0;
-    let response;
-    let currentModel = fallbackModels[modelIndex];
-    let hasError = false;
-    
-    while (modelIndex < fallbackModels.length) {
+    let translatedText = '';
+    let usedModel = '';
+
+    // 1. Try Grok (xAI) if configured
+    if (process.env.XAI_API_KEY && process.env.XAI_API_KEY !== 'MY_XAI_API_KEY') {
       try {
-        response = await ai.models.generateContent({
-          model: currentModel,
-          contents: prompt,
+        const openai = new OpenAI({
+          apiKey: process.env.XAI_API_KEY,
+          baseURL: "https://api.xai.com/v1",
         });
-        break; // Success
-      } catch (error: any) {
-        console.error(`Gemini call error on model ${currentModel}:`, error);
-        if (modelIndex < fallbackModels.length - 1) {
-          modelIndex++;
-          currentModel = fallbackModels[modelIndex];
-        } else {
-          hasError = true;
-          break;
+        const completion = await openai.chat.completions.create({
+          messages: [
+            { role: "system", content: "You are a professional real-time translator." },
+            { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
+          ],
+          model: "grok-2-latest",
+        });
+        
+        if (completion.choices[0]?.message?.content) {
+          translatedText = completion.choices[0].message.content.trim();
+          usedModel = 'grok';
         }
+      } catch (grokError) {
+        console.error('Grok translation error:', grokError);
+        // Fall down to Gemini
       }
     }
 
-    if (hasError || !response || !response.text) {
+    // 2. Try Gemini if Grok failed or is not configured
+    if (!translatedText && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
+      let ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
+      let modelIndex = 0;
+      let currentModel = fallbackModels[modelIndex];
+      let hasError = false;
+      let response;
+      
+      while (modelIndex < fallbackModels.length) {
+        try {
+          response = await ai.models.generateContent({
+            model: currentModel,
+            contents: prompt,
+          });
+          break; // Success
+        } catch (error: any) {
+          console.error(`Gemini call error on model ${currentModel}:`, error);
+          if (modelIndex < fallbackModels.length - 1) {
+            modelIndex++;
+            currentModel = fallbackModels[modelIndex];
+          } else {
+            hasError = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasError && response?.text) {
+        translatedText = response.text.trim();
+        usedModel = 'gemini';
+      }
+    }
+
+    // 3. Try Offline Fallback if both failed
+    if (!translatedText) {
       const simulatedResult = getFallbackTranslation(text, targetLanguage);
       return res.status(200).json({ 
         translatedText: simulatedResult,
         isSimulated: true,
-        note: 'API error fallback used.'
+        note: 'Offline fallback used. Provide a valid XAI_API_KEY or GEMINI_API_KEY.'
       });
     }
 
     return res.status(200).json({ 
-      translatedText: (response.text || '').trim()
+      translatedText: translatedText,
+      model: usedModel
     });
   } catch (error) {
     console.error('Translation serverless error caught:', error);
