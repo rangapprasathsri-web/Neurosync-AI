@@ -107,12 +107,70 @@ export const useSpeechSynthesis = () => {
     }
     (window as any).utterances.push(utterance);
     
-    // Auto Voice Detection based on Language
-    let voiceToUse = selectedVoice;
-
     // Detect the language based on the text itself, fall back to langHint or English
     const detectedLang = detectLanguageFromText(text);
     const activeLang = detectedLang || langHint || 'English';
+
+    let shouldUseServerTTS = true; // Use server TTS to ensure it works for all languages (no missing browser voices)
+
+    
+    if (shouldUseServerTTS) {
+      setIsSpeaking(true);
+      setSpeakingType(type);
+      
+      fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, targetLanguage: activeLang })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.audioUrls && data.audioUrls.length > 0) {
+          let currentIndex = 0;
+          
+          const playNext = () => {
+             if (currentIndex >= data.audioUrls.length) {
+                setIsSpeaking(false);
+                setSpeakingType(null);
+                return;
+             }
+             const audio = new Audio(data.audioUrls[currentIndex]);
+             audio.playbackRate = rate;
+             audio.onended = () => {
+                currentIndex++;
+                playNext();
+             };
+             audio.onerror = () => {
+                setIsSpeaking(false);
+                setSpeakingType(null);
+                setSynthesisError("Failed to play generated audio.");
+             };
+             (window as any).currentAudio = audio;
+             audio.play().catch(e => {
+                console.error("Audio playback blocked", e);
+                setSynthesisError("Click Troubleshoot Audio to allow playback.");
+                setIsSpeaking(false);
+                setSpeakingType(null);
+             });
+          };
+          
+          playNext();
+        } else {
+           setIsSpeaking(false);
+           setSpeakingType(null);
+        }
+      })
+      .catch(err => {
+
+        console.error("TTS fetch error", err);
+        setIsSpeaking(false);
+        setSpeakingType(null);
+      });
+      return;
+    }
+
+    // Auto Voice Detection based on Language (Native Fallback)
+    let voiceToUse = selectedVoice;
 
     if (activeLang) {
       const langMap: Record<string, string> = {
@@ -210,18 +268,27 @@ export const useSpeechSynthesis = () => {
   const stop = useCallback(() => {
     if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-        setSpeakingType(null);
     }
+    if ((window as any).currentAudio) {
+        (window as any).currentAudio.pause();
+        (window as any).currentAudio.currentTime = 0;
+    }
+    setIsSpeaking(false);
+    setSpeakingType(null);
   }, []);
 
   const resetEngine = useCallback(() => {
     if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-        setSpeakingType(null);
-        setSynthesisError(null);
-        try {
+    }
+    if ((window as any).currentAudio) {
+        (window as any).currentAudio.pause();
+        (window as any).currentAudio.currentTime = 0;
+    }
+    setIsSpeaking(false);
+    setSpeakingType(null);
+    setSynthesisError(null);
+    try {
           window.speechSynthesis.pause();
           window.speechSynthesis.resume();
           
@@ -235,7 +302,6 @@ export const useSpeechSynthesis = () => {
         } catch (e) {
           console.error("Failed to reset speech engine", e);
         }
-    }
   }, []);
 
   return {
