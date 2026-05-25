@@ -111,13 +111,16 @@ export default function App() {
     else if (newTone === 'Robotic AI') { setPitch(0.5); setRate(0.85); }
   };
 
+  const getLangLabel = (code: string) => INPUT_LANGUAGES.find(l => l.code === code)?.label || code;
+
   const handleTranslate = async (id: string, text: string, targetLang: string, detectedLang?: string) => {
     setIsProcessing(true);
     try {
+      const fullTargetLang = getLangLabel(targetLang);
       const response = await fetch('/api/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, targetLanguage: targetLang })
+        body: JSON.stringify({ text, targetLanguage: fullTargetLang })
       });
       
       if (!response.ok) {
@@ -394,7 +397,7 @@ export default function App() {
                             <div key={index} className="flex items-start justify-between bg-cyan-950/10 p-2.5 rounded-lg border border-cyan-500/5 group/trans hover:bg-cyan-950/20 transition-all">
                               <div className="space-y-0.5">
                                 <span className="inline-block text-[10px] uppercase font-bold tracking-wider text-indigo-400">
-                                  {trans.language}
+                                  {getLangLabel(trans.language)}
                                 </span>
                                 <p className="text-base leading-relaxed text-cyan-200 font-medium">
                                   {trans.text}
@@ -403,7 +406,7 @@ export default function App() {
                               <div className="flex opacity-0 group-hover/trans:opacity-100 transition-all shrink-0 space-x-1 pl-2">
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); speak(trans.text, trans.language, false, 'translated'); }} 
-                                  title={`Dictate Translated (${trans.language})`} 
+                                  title={`Dictate Translated (${getLangLabel(trans.language)})`} 
                                   className="p-1 px-1.5 bg-indigo-500/10 rounded hover:bg-indigo-500/20 hover:text-indigo-400 transition-all text-indigo-400/70 text-xs flex items-center gap-1"
                                 >
                                   <Volume2 className="w-3.5 h-3.5" />
@@ -579,7 +582,7 @@ export default function App() {
                              <div key={index} className="flex items-start justify-between bg-indigo-950/20 p-3 rounded-lg border border-indigo-500/10 group/transitem">
                                <div className="space-y-1">
                                  <span className="inline-block text-[10px] font-bold tracking-wider text-indigo-400 bg-indigo-400/10 px-1.5 py-0.5 rounded uppercase">
-                                   {trans.language}
+                                   {getLangLabel(trans.language)}
                                  </span>
                                  <p className="text-lg font-medium tracking-tight text-white leading-relaxed">
                                    {trans.text}
@@ -588,7 +591,7 @@ export default function App() {
                                <button 
                                  onClick={(e) => { e.stopPropagation(); speak(trans.text, trans.language, false, 'translated'); }}
                                  className="opacity-0 group-hover:opacity-100 group-hover/transitem:opacity-100 p-2 bg-white/5 border border-white/5 rounded-md hover:bg-cyan-500/20 hover:text-cyan-400 transition-all shrink-0 ml-2"
-                                 title={`Dictate ${trans.language} translation`}
+                                 title={`Dictate ${getLangLabel(trans.language)} translation`}
                                 >
                                  <Volume2 className="w-4 h-4" />
                                </button>
