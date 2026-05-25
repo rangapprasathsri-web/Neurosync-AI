@@ -20,25 +20,16 @@ export default async function handler(req: any, res: any) {
     const activeLang = targetLanguage === 'Auto Detect' ? 'English' : targetLanguage;
     const hintCode = langMap[activeLang] || activeLang.toLowerCase().substring(0, 2);
 
-    // Limit text to 200 chars for google-tts-api to avoid errors, or fallback to long format
-    let audioUrls = [];
-    if (text.length > 200) {
-       const results = googleTTS.getAllAudioUrls(text, {
-          lang: hintCode,
-          slow: false,
-          host: 'https://translate.google.com',
-          splitPunct: ',.?'
-       });
-       audioUrls = results.map(r => r.url);
-    } else {
-       audioUrls = [
-          googleTTS.getAudioUrl(text, {
-            lang: hintCode,
-            slow: false,
-            host: 'https://translate.google.com',
-          })
-       ];
-    }
+    // Fetch audio from translation server-side into base64 format, preventing client CORS issues
+    const results = await googleTTS.getAllAudioBase64(text, {
+      lang: hintCode,
+      slow: false,
+      host: 'https://translate.google.com',
+      splitPunct: ',.?'
+    });
+    
+    // Construct valid base64 data URIs
+    const audioUrls = results.map(r => `data:audio/mp3;base64,${r.base64}`);
 
     return res.status(200).json({ audioUrls });
   } catch (error) {

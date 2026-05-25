@@ -298,6 +298,11 @@ export const useSpeechSynthesis = () => {
             testUtterance.volume = 0.35;
             testUtterance.rate = 1.1;
             window.speechSynthesis.speak(testUtterance);
+            
+            // Also unlock standard HTML5 Audio which is used by our server-side TTS fallback
+            const dummyAudio = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+            dummyAudio.volume = 0.01;
+            dummyAudio.play().catch(() => {});
           }, 100);
         } catch (e) {
           console.error("Failed to reset speech engine", e);

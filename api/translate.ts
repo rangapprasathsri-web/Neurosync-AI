@@ -97,6 +97,23 @@ const fallbackDictionary: Record<string, Record<string, string>> = {
     goodbye: "さようなら",
     bye: "またね"
   },
+  malayalam: {
+    hello: "നമസ്കാരം",
+    hi: "നമസ്കാരം",
+    "how are you": "നിങ്ങൾക്ക് സുഖമാണോ?",
+    "how are you?": "നിങ്ങൾക്ക് സുഖമാണോ?",
+    "good morning": "സുപ്രഭാതം",
+    "good morning!": "സുപ്രഭാതം",
+    "thank you": "നന്ദി",
+    "thank you!": "നന്ദി",
+    thanks: "നന്ദി",
+    welcome: "സ്വാഗതം",
+    "welcome!": "സ്വാഗതം",
+    goodbye: "വിട",
+    bye: "വിട",
+    "what is your name?": "നിങ്ങളുടെ പേരെന്താണ്?",
+    "what is your name": "നിങ്ങളുടെ പേരെന്താണ്?"
+  },
   chinese: {
     hello: "你好",
     hi: "你好",
@@ -129,6 +146,7 @@ function getFallbackTranslation(text: string, lang: string): string {
   if (targetLangLower === 'german') return `Hallo: "${text}"`;
   if (targetLangLower === 'japanese') return `こんにちは: "${text}"`;
   if (targetLangLower === 'chinese') return `你好: "${text}"`;
+  if (targetLangLower === 'malayalam') return `നമസ്കാരം: "${text}"`;
   
   return `${text}`;
 }
