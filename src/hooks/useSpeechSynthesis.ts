@@ -128,7 +128,15 @@ export const useSpeechSynthesis = () => {
             const text = await res.text();
             throw new Error(`HTTP error! status: ${res.status}, body: ${text.slice(0, 50)}`);
          }
-         return res.json();
+         const text = await res.text();
+         if (!text) {
+             throw new Error("Empty response body from TTS server");
+         }
+         try {
+             return JSON.parse(text);
+         } catch (e) {
+             throw new Error("TTS fetch error: Failed to parse JSON: " + text.slice(0, 50));
+         }
       })
       .then(data => {
         if (data.audioUrls && data.audioUrls.length > 0) {

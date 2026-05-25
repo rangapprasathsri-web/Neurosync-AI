@@ -170,6 +170,7 @@ async function startServer() {
   app.post('/api/translate', async (req, res) => {
     try {
       const { text, targetLanguage } = req.body;
+      console.log(`Translate requested for length ${text?.length}, target: ${targetLanguage}`);
       if (!text || !targetLanguage) {
         return res.status(400).json({ error: 'Missing text or targetLanguage' });
       }
@@ -242,6 +243,28 @@ Text: "${text}"`;
 
       // 3. Try Offline Fallback if both failed
       if (!translatedText) {
+        try {
+          const langMapIso: Record<string, string> = {
+            'tamil': 'ta', 'hindi': 'hi', 'malayalam': 'ml', 'marathi': 'mr',
+            'english': 'en', 'telugu': 'te', 'kannada': 'kn', 'bengali': 'bn',
+            'spanish': 'es', 'french': 'fr', 'german': 'de', 'japanese': 'ja', 'chinese': 'zh-CN'
+          };
+          const isoTarget = langMapIso[targetLanguage.toLowerCase()] || 'en';
+          
+          const myMemRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=Autodetect|${isoTarget}`);
+          const myMemData = await myMemRes.json();
+          console.log("MyMemory response:", myMemData?.responseData?.translatedText?.substring(0, 50));
+          // MyMemory puts match in responseData
+          if (myMemData?.responseData?.translatedText && !myMemData.responseData.translatedText.includes('MYMEMORY WARNING')) {
+            translatedText = myMemData.responseData.translatedText;
+            usedModel = 'mymemory-free';
+          }
+        } catch (e) {
+          console.error("MyMemory fallback failed", e);
+        }
+      }
+
+      if (!translatedText) {
         const simulatedResult = getFallbackTranslation(text, targetLanguage);
         return res.json({ 
           translatedText: simulatedResult,
@@ -281,6 +304,7 @@ Text: "${text}"`;
       const activeLang = targetLanguage === 'Auto Detect' ? 'English' : targetLanguage;
       const hintCode = langMap[activeLang] || activeLang.toLowerCase().substring(0, 2);
 
+      console.log(`TTS requested for length ${text.length}, lang: ${targetLanguage}, hint: ${hintCode}`);
       // Fetch audio from translation server-side into base64 format, preventing client CORS issues
       const results = await googleTTS.getAllAudioBase64(text, {
         lang: hintCode,
