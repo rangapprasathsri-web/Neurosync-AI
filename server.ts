@@ -159,147 +159,79 @@ async function startServer() {
 
   app.post('/api/translate', async (req, res) => {
     try {
-      const { text, targetLanguage, customApiKey } = req.body;
-      console.log(`Translate requested for length ${text?.length}, target: ${targetLanguage}, hasCustomKey: ${!!customApiKey}`);
+      const { text, targetLanguage } = req.body;
+      console.log(`Translate requested for length ${text?.length}, target: ${targetLanguage}`);
       if (!text || !targetLanguage) {
         return res.status(400).json({ error: 'Missing text or targetLanguage' });
       }
 
-      const prompt = `You are a professional real-time translator.
-Translate the following text to ${targetLanguage}. Maintain the original meaning and tone.
-Return ONLY the final translated text, with no markdown formatting.
-Text: "${text}"`;
+      const langMapIso: Record<string, string> = {
+        'tamil': 'ta', 'hindi': 'hi', 'malayalam': 'ml', 'marathi': 'mr',
+        'english': 'en', 'telugu': 'te', 'kannada': 'kn', 'bengali': 'bn',
+        'spanish': 'es', 'french': 'fr', 'german': 'de', 'japanese': 'ja', 
+        'chinese': 'zh-CN', 'chinese (simplified)': 'zh-CN'
+      };
+      const isoTarget = langMapIso[targetLanguage.toLowerCase().trim()] || 'en';
 
       let translatedText = '';
       let usedModel = '';
 
-      // 1. Try Grok (xAI) if configured or if custom key provided
-      const grokKey = customApiKey || process.env.XAI_API_KEY;
-      if (grokKey && grokKey !== 'MY_XAI_API_KEY') {
-        const xaiModels = ['grok-2-latest', 'grok-beta', 'grok-2', 'grok-2-1212'];
-        for (const model of xaiModels) {
-          try {
-            const openai = new OpenAI({
-              apiKey: grokKey,
-              baseURL: "https://api.x.ai/v1",
-            });
-            const completion = await openai.chat.completions.create({
-              messages: [
-                { role: "system", content: "You are a professional real-time translator." },
-                { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
-              ],
-              model: model
-            });
-            
-            if (completion.choices[0]?.message?.content) {
-              translatedText = completion.choices[0].message.content.trim();
-              usedModel = model;
-              break;
-            }
-          } catch (grokError: any) {
-            console.error(`Grok model ${model} failed`, grokError.message);
-          }
-        }
-      }
-
-      // 2. Try Gemini if Grok failed or is not configured
-      if (!translatedText && ai) {
-        const fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
-        let modelIndex = 0;
-        let response;
-        let currentModel = fallbackModels[modelIndex];
-        let hasError = false;
-        
-        while (modelIndex < fallbackModels.length) {
-          try {
-            response = await ai.models.generateContent({
-              model: currentModel,
-              contents: prompt,
-            });
-            break; // Success
-          } catch (error: any) {
-            if (modelIndex < fallbackModels.length - 1) {
-              modelIndex++;
-              currentModel = fallbackModels[modelIndex];
-            } else {
-              hasError = true;
-              break;
-            }
-          }
-        }
-
-        if (!hasError && response && response.text) {
-          translatedText = response.text.trim();
-          usedModel = 'gemini';
-        }
-      }
-
-      // 3. Try Auto-Translate Fallback if both failed
-      if (!translatedText) {
-        const langMapIso: Record<string, string> = {
-          'tamil': 'ta', 'hindi': 'hi', 'malayalam': 'ml', 'marathi': 'mr',
-          'english': 'en', 'telugu': 'te', 'kannada': 'kn', 'bengali': 'bn',
-          'spanish': 'es', 'french': 'fr', 'german': 'de', 'japanese': 'ja', 'chinese': 'zh-CN'
-        };
-        const isoTarget = langMapIso[targetLanguage.toLowerCase()] || 'en';
-
-        // Method 3.a: clients5 google translate
-        try {
-          const res5 = await fetch(`https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${isoTarget}&q=${encodeURIComponent(text)}`);
-          if (res5.ok) {
-            const data5 = await res5.json();
-            if (data5 && data5[0] && typeof data5[0][0] === 'string') {
+      // Method 1: clients5 google translate (ultra fast, highly accurate)
+      try {
+        const res5 = await fetch(`https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${isoTarget}&q=${encodeURIComponent(text)}`);
+        if (res5.ok) {
+          const data5 = await res5.json();
+          if (data5 && data5[0]) {
+            if (typeof data5[0] === 'string') {
+              translatedText = data5[0];
+            } else if (Array.isArray(data5[0]) && typeof data5[0][0] === 'string') {
               translatedText = data5[0][0];
-              usedModel = 'google-translate-chrome';
+            }
+            if (translatedText) {
+              usedModel = 'google-translate';
             }
           }
-        } catch(e) { console.error("Chrome GT failed", e); }
-
-        // Method 3.b: gtx google translate
-        if (!translatedText) {
-          try {
-            const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
-            if (gtRes.ok) {
-              const gtData = await gtRes.json();
-              if (gtData && gtData[0]) {
-                translatedText = gtData[0].map((x: any) => x[0]).join('');
-                usedModel = 'google-translate-free';
-              }
-            }
-          } catch (e) { console.error("GTX fallback failed", e); }
         }
-
-        // Method 3.c: mymemory translate
-        if (!translatedText) {
-          try {
-            const mmRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${isoTarget}`);
-            if (mmRes.ok) {
-              const mmData = await mmRes.json();
-              if (mmData && mmData.responseData && mmData.responseData.translatedText) {
-                translatedText = mmData.responseData.translatedText;
-                usedModel = 'mymemory-free';
-              }
-            }
-          } catch(e) { console.error("MyMemory failed", e); }
-        }
+      } catch(e) { 
+        console.error("Chrome GT failed", e); 
       }
 
+      // Method 2: gtx google translate (robust backup)
       if (!translatedText) {
-        const simulatedResult = getFallbackTranslation(text, targetLanguage);
-        return res.json({ 
-          translatedText: simulatedResult,
-          isSimulated: true,
-          note: `All translation API attempts failed.`
-        });
+        try {
+          const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
+          if (gtRes.ok) {
+            const gtData = await gtRes.json();
+            if (gtData && gtData[0]) {
+              translatedText = gtData[0].map((x: any) => x[0]).join('');
+              usedModel = 'google-translate';
+            }
+          }
+        } catch (e) { 
+          console.error("GTX fallback failed", e); 
+        }
       }
 
-      if (translatedText) {
-        translatedText = translatedText
-          .replace(/^Here is the.*?:\s*/i, '')
-          .replace(/^Sure,.*?:\s*/i, '')
-          .replace(/^Translation:\s*/i, '')
-          .replace(/^"|"$/g, '')
-          .trim();
+      // Method 3: MyMemory free api (backup)
+      if (!translatedText) {
+        try {
+          const mmRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${isoTarget}`);
+          if (mmRes.ok) {
+            const mmData = await mmRes.json();
+            if (mmData && mmData.responseData && mmData.responseData.translatedText) {
+              translatedText = mmData.responseData.translatedText;
+              usedModel = 'mymemory-free';
+            }
+          }
+        } catch(e) { 
+          console.error("MyMemory failed", e); 
+        }
+      }
+
+      // Method 4: Offline dict lookup fallback
+      if (!translatedText) {
+        translatedText = getFallbackTranslation(text, targetLanguage);
+        usedModel = 'offline-dictionary';
       }
 
       res.json({ 
@@ -308,7 +240,6 @@ Text: "${text}"`;
       });
     } catch (error: any) {
       console.error('Translation server-side crash caught successfully:', error);
-      // Ensure zero crash/failure
       const simulatedResult = getFallbackTranslation(req.body?.text || '', req.body?.targetLanguage || 'Tamil');
       res.json({ 
         translatedText: simulatedResult,
