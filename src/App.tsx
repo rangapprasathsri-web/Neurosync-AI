@@ -53,6 +53,7 @@ export default function App() {
   const [autoTranslate, setAutoTranslate] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
+  const [sensitivity, setSensitivity] = useState(0.5);
 
   useEffect(() => {
     try {
@@ -215,7 +216,7 @@ export default function App() {
         t.id === newId ? { ...t, isFinal: true } : t
       ));
     }
-  });
+  }, sensitivity);
 
   useEffect(() => {
     transcriptsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -460,8 +461,20 @@ export default function App() {
                   </p>
                 </div>
               ) : (
-                <div className="text-[11px] text-slate-500 italic text-center mt-2">
-                  Tip: Press <kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded font-sans text-[10px] text-slate-400">Space</kbd> to unlock microphone toggle.
+                <div className="text-[11px] text-slate-500 italic mt-2 flex items-center justify-between px-2">
+                  <span>Tip: Press <kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded font-sans text-[10px] text-slate-400">Space</kbd> to unlock microphone toggle.</span>
+                  <div className="flex items-center gap-2 not-italic bg-black/20 px-2 py-1 rounded border border-white/5" title="Filter background noise (Higher = accepts lower confidence speech)">
+                    <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Sensitivity</span>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.1" 
+                      value={sensitivity} 
+                      onChange={e => setSensitivity(parseFloat(e.target.value))} 
+                      className="w-20 accent-cyan-500 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer" 
+                    />
+                  </div>
                 </div>
               )}
               <div className="mt-6 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-center gap-4 relative">

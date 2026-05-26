@@ -202,9 +202,8 @@ Text: "${text}"`;
             translatedText = completion.choices[0].message.content.trim();
             usedModel = 'grok';
           }
-        } catch (grokError) {
-          console.error('Grok translation error:', grokError);
-          // Fall down to Gemini
+        } catch (grokError: any) {
+          console.warn(`[Grok] Translation failed (${grokError.status || grokError.message || 'Error'}). Falling back to Gemini.`);
         }
       }
 
@@ -317,9 +316,9 @@ Text: "${text}"`;
       const audioUrls = results.map((r: any) => `data:audio/mp3;base64,${r.base64}`);
 
       res.status(200).json({ audioUrls });
-    } catch (error) {
-      console.error('TTS error:', error);
-      res.status(500).json({ error: 'Failed to generate speech' });
+    } catch (error: any) {
+      console.warn(`[TTS Server] Error generating speech: ${error.message || 'Unknown error'}. Client will use native fallback.`);
+      res.status(503).json({ error: 'Failed to generate speech via Server TTS' });
     }
   });
 

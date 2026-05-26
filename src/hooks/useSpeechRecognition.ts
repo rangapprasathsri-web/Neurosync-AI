@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-export const useSpeechRecognition = (language: string, onFinalTranscript: (text: string) => void) => {
+export const useSpeechRecognition = (language: string, onFinalTranscript: (text: string) => void, sensitivity: number = 0.5) => {
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [micError, setMicError] = useState<string | null>(null);
@@ -16,6 +16,7 @@ export const useSpeechRecognition = (language: string, onFinalTranscript: (text:
   const isListeningRef = useRef(isListening);
   const onFinalRef = useRef(onFinalTranscript);
   const languageRef = useRef(language);
+  const sensitivityRef = useRef(sensitivity);
 
   // Sync refs
   useEffect(() => {
@@ -25,6 +26,10 @@ export const useSpeechRecognition = (language: string, onFinalTranscript: (text:
   useEffect(() => {
     onFinalRef.current = onFinalTranscript;
   }, [onFinalTranscript]);
+  
+  useEffect(() => {
+    sensitivityRef.current = sensitivity;
+  }, [sensitivity]);
 
   const getBcp47Lang = (lang: string) => {
     if (!lang) return window.navigator.language || 'en-US';
@@ -70,12 +75,24 @@ export const useSpeechRecognition = (language: string, onFinalTranscript: (text:
     rec.onresult = (event: any) => {
       let currentInterim = '';
       let finalTranscriptChunk = '';
+      
+      // Calculate confidence threshold: sensitivity 1 = threshold 0, sensitivity 0 = threshold 0.9
+      const confidenceThreshold = (1 - sensitivityRef.current) * 0.9;
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const result = event.results[i][0];
+        // Only accept if confidence is above the threshold, or there is no confidence scoring available
+        // Sometimes Chrome gives 0.0 for interim, or Safari lacks it. Only filter if we have a valid non-zero confidence score that falls below threshold.
         if (event.results[i].isFinal) {
-          finalTranscriptChunk += event.results[i][0].transcript;
+          const confidence = result.confidence;
+          // If confidence is tightly given and is too low, we filter it. (0 is often a fallback for "I don't know")
+          if (typeof confidence === 'number' && confidence > 0 && confidence < confidenceThreshold) {
+             console.log(`Filtered out low confidence final transcript: "${result.transcript}" (Conf: ${confidence.toFixed(2)} < ${confidenceThreshold.toFixed(2)})`);
+          } else {
+             finalTranscriptChunk += result.transcript;
+          }
         } else {
-          currentInterim += event.results[i][0].transcript;
+          currentInterim += result.transcript;
         }
       }
 

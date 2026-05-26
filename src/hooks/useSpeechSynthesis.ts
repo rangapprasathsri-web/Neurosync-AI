@@ -170,111 +170,113 @@ export const useSpeechSynthesis = () => {
           
           playNext();
         } else {
-           setIsSpeaking(false);
-           setSpeakingType(null);
+           throw new Error("No audio URLs returned from TTS server");
         }
       })
       .catch(err => {
-
-        console.error("TTS fetch error", err);
-        setIsSpeaking(false);
-        setSpeakingType(null);
+        console.error("TTS fetch error, falling back to native TTS:", err);
+        // Do native fallback
+        runNativeFallback();
       });
       return;
     }
-
-    // Auto Voice Detection based on Language (Native Fallback)
-    let voiceToUse = selectedVoice;
-
-    if (activeLang) {
-      const langMap: Record<string, string> = {
-        'Tamil': 'ta', 'ta-IN': 'ta',
-        'Hindi': 'hi', 'hi-IN': 'hi',
-        'Malayalam': 'ml', 'ml-IN': 'ml',
-        'Marathi': 'mr', 'mr-IN': 'mr',
-        'English': 'en', 'en-US': 'en',
-        'Telugu': 'te', 'te-IN': 'te',
-        'Kannada': 'kn', 'kn-IN': 'kn',
-        'Bengali': 'bn', 'bn-IN': 'bn',
-        'Spanish': 'es', 'es-ES': 'es',
-        'French': 'fr', 'fr-FR': 'fr',
-        'German': 'de', 'de-DE': 'de',
-        'Japanese': 'ja', 'ja-JP': 'ja',
-        'Chinese': 'zh', 'zh-CN': 'zh'
-      };
-      const hintCode = langMap[activeLang] || activeLang.toLowerCase().substring(0, 2);
-      
-      // Only swap voice if current selectedVoice doesn't match the required language
-      if (!selectedVoice || !selectedVoice.lang.toLowerCase().includes(hintCode)) {
-        const matchingVoices = voices.filter(v => 
-          v.lang.toLowerCase().includes(hintCode) || 
-          v.name.toLowerCase().includes(hintCode) ||
-          v.name.toLowerCase().includes(activeLang.toLowerCase())
-        );
-        if (matchingVoices.length > 0) {
-          // Prefer Google voices for better quality
-          voiceToUse = matchingVoices.find(v => v.name.includes('Google') || v.name.includes('Online')) || matchingVoices[0];
-        } else {
-          voiceToUse = null; // Don't force current voice if it doesn't match the language
-        }
-      }
-      
-      // Set the lang attribute as a fallback so the OS can auto-route if voice is missing
-      const bcpTagMap: Record<string, string> = {
-        'Tamil': 'ta-IN', 'Hindi': 'hi-IN', 'Malayalam': 'ml-IN', 'Marathi': 'mr-IN', 'English': 'en-US',
-        'Telugu': 'te-IN', 'Kannada': 'kn-IN', 'Bengali': 'bn-IN', 
-        'Spanish': 'es-ES', 'French': 'fr-FR', 'German': 'de-DE', 
-        'Japanese': 'ja-JP', 'Chinese': 'zh-CN'
-      };
-      utterance.lang = bcpTagMap[activeLang] || langMap[activeLang] || activeLang;
-    }
-
-    if (voiceToUse) {
-      utterance.voice = voiceToUse;
-    }
     
-    utterance.rate = rate;
-    utterance.pitch = pitch;
-    utterance.volume = volume;
+    runNativeFallback();
+    
+    function runNativeFallback() {
+      // Auto Voice Detection based on Language (Native Fallback)
+      let voiceToUse = selectedVoice;
 
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setSpeakingType((utterance as any).speechType || 'translated');
-    };
-    utterance.onend = () => {
-      // Check if there are other utterances still playing or queued
-      if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-        setIsSpeaking(false);
-        setSpeakingType(null);
-        (window as any).utterances = []; // Free memory
-      }
-    };
-    utterance.onerror = (e) => {
-      console.error("Speech synthesis error", e);
-      setSynthesisError(`Synthesis error: ${e.error || 'unspecified'}. If using a preview frame, browser policies may restrict audio playback. Click 'Troubleshoot Audio' to unlock.`);
-      if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-        setIsSpeaking(false);
-        setSpeakingType(null);
-        (window as any).utterances = []; // Free memory
-      }
-    };
-
-    console.log(`Speaking queued:[${queue}] type:[${type}] lang:[${langHint}] voice:[${voiceToUse?.name}] text:`, text);
-
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-
-    if (!queue) {
-      // Avoid browser concurrency lock-ups from immediate speak after cancel
-      setTimeout(() => {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
+      if (activeLang) {
+        const langMap: Record<string, string> = {
+          'Tamil': 'ta', 'ta-IN': 'ta',
+          'Hindi': 'hi', 'hi-IN': 'hi',
+          'Malayalam': 'ml', 'ml-IN': 'ml',
+          'Marathi': 'mr', 'mr-IN': 'mr',
+          'English': 'en', 'en-US': 'en',
+          'Telugu': 'te', 'te-IN': 'te',
+          'Kannada': 'kn', 'kn-IN': 'kn',
+          'Bengali': 'bn', 'bn-IN': 'bn',
+          'Spanish': 'es', 'es-ES': 'es',
+          'French': 'fr', 'fr-FR': 'fr',
+          'German': 'de', 'de-DE': 'de',
+          'Japanese': 'ja', 'ja-JP': 'ja',
+          'Chinese': 'zh', 'zh-CN': 'zh'
+        };
+        const hintCode = langMap[activeLang] || activeLang.toLowerCase().substring(0, 2);
+        
+        // Only swap voice if current selectedVoice doesn't match the required language
+        if (!selectedVoice || !selectedVoice.lang.toLowerCase().includes(hintCode)) {
+          const matchingVoices = voices.filter(v => 
+            v.lang.toLowerCase().includes(hintCode) || 
+            v.name.toLowerCase().includes(hintCode) ||
+            v.name.toLowerCase().includes(activeLang.toLowerCase())
+          );
+          if (matchingVoices.length > 0) {
+            // Prefer Google voices for better quality
+            voiceToUse = matchingVoices.find(v => v.name.includes('Google') || v.name.includes('Online')) || matchingVoices[0];
+          } else {
+            voiceToUse = null; // Don't force current voice if it doesn't match the language
+          }
         }
+        
+        // Set the lang attribute as a fallback so the OS can auto-route if voice is missing
+        const bcpTagMap: Record<string, string> = {
+          'Tamil': 'ta-IN', 'Hindi': 'hi-IN', 'Malayalam': 'ml-IN', 'Marathi': 'mr-IN', 'English': 'en-US',
+          'Telugu': 'te-IN', 'Kannada': 'kn-IN', 'Bengali': 'bn-IN', 
+          'Spanish': 'es-ES', 'French': 'fr-FR', 'German': 'de-DE', 
+          'Japanese': 'ja-JP', 'Chinese': 'zh-CN'
+        };
+        utterance.lang = bcpTagMap[activeLang] || langMap[activeLang] || activeLang;
+      }
+
+      if (voiceToUse) {
+        utterance.voice = voiceToUse;
+      }
+      
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+      utterance.volume = volume;
+
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        setSpeakingType((utterance as any).speechType || 'translated');
+      };
+      utterance.onend = () => {
+        // Check if there are other utterances still playing or queued
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          setIsSpeaking(false);
+          setSpeakingType(null);
+          (window as any).utterances = []; // Free memory
+        }
+      };
+      utterance.onerror = (e) => {
+        console.error("Speech synthesis error", e);
+        setSynthesisError(`Synthesis error: ${e.error || 'unspecified'}.`);
+        if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
+          setIsSpeaking(false);
+          setSpeakingType(null);
+          (window as any).utterances = []; // Free memory
+        }
+      };
+
+      console.log(`Speaking queued:[${queue}] type:[${type}] lang:[${langHint}] voice:[${voiceToUse?.name}] text:`, text);
+
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+
+      if (!queue) {
+        // Avoid browser concurrency lock-ups from immediate speak after cancel
+        setTimeout(() => {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+          window.speechSynthesis.speak(utterance);
+        }, 50);
+      } else {
         window.speechSynthesis.speak(utterance);
-      }, 50);
-    } else {
-      window.speechSynthesis.speak(utterance);
+      }
     }
 
   }, [selectedVoice, voices, rate, pitch, volume]);
