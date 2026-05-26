@@ -288,10 +288,12 @@ Text: "${text}"`;
 
   app.post('/api/tts', async (req, res) => {
     try {
-      const { text, targetLanguage } = req.body;
+      let { text, targetLanguage } = req.body;
       if (!text || !targetLanguage) {
         return res.status(400).json({ error: 'Missing text or targetLanguage' });
       }
+      
+      text = text.replace('⚡ ', '').replace('[DIAG]: ', '').replace('[CRASH]: ', '');
 
       const langMap: Record<string, string> = {
         'Tamil': 'ta', 'Hindi': 'hi', 'Malayalam': 'ml', 'Marathi': 'mr',
