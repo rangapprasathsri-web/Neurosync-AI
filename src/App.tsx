@@ -10,6 +10,36 @@ import { RoboAvatar } from './components/RoboAvatar';
 
 const lngDetector = new LanguageDetect();
 
+const detectLanguage = (text: string): string => {
+  const clean = text.toLowerCase().trim();
+  if (!clean) return '';
+
+  const commonEnglishWords = [
+    'can', 'you', 'translate', 'this', 'for', 'me', 'please', 'hello', 'hi', 'how', 
+    'are', 'you', 'good', 'morning', 'thank', 'thanks', 'welcome', 'goodbye', 'bye', 
+    'is', 'it', 'what', 'where', 'who', 'why', 'to', 'the', 'a', 'an', 'and', 'or', 'but'
+  ];
+  
+  const words = clean.split(/\s+/);
+  const hasEnglishWord = words.some(w => commonEnglishWords.includes(w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"")));
+  
+  if (/^[a-zA-Z0-9\s.,?!'"]+$/.test(clean) && hasEnglishWord) {
+    return 'English';
+  }
+
+  try {
+    const detectRes = lngDetector.detect(text, 1);
+    if (detectRes && detectRes.length > 0) {
+      const name = detectRes[0][0];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+  } catch (e) {
+    console.error('Language detection err', e);
+  }
+  
+  return 'English';
+};
+
 const INITIAL_LANGUAGES = [
   { code: 'English', label: 'English' },
   { code: 'Tamil', label: 'Tamil' },
@@ -195,15 +225,7 @@ export default function App() {
 
   const { isListening, interimTranscript, toggleListening, micError } = useSpeechRecognition(inputLanguage, (text) => {
     const newId = Date.now().toString();
-    let detectedLangName = '';
-    try {
-      const detectRes = lngDetector.detect(text, 1);
-      detectedLangName = (!inputLanguage && detectRes.length > 0) 
-        ? detectRes[0][0].charAt(0).toUpperCase() + detectRes[0][0].slice(1)
-        : '';
-    } catch(e) {
-      console.error('Language detection err', e);
-    }
+    const detectedLangName = !inputLanguage ? detectLanguage(text) : '';
       
     setTranscripts(prev => [...prev, { id: newId, originalText: text, translatedText: '', isFinal: false, timestamp: Date.now(), detectedLanguage: detectedLangName }]);
     
@@ -501,13 +523,7 @@ export default function App() {
                     const text = target.textInput.value.trim();
                     if (text) {
                        const newId = Date.now().toString();
-                       let detectedLangName = '';
-                       try {
-                         const detectRes = lngDetector.detect(text, 1);
-                         detectedLangName = (!inputLanguage && detectRes.length > 0) 
-                           ? detectRes[0][0].charAt(0).toUpperCase() + detectRes[0][0].slice(1)
-                           : '';
-                       } catch(e) {}
+                       const detectedLangName = !inputLanguage ? detectLanguage(text) : '';
                          
                        setTranscripts(prev => [...prev, { id: newId, originalText: text, translatedText: '', isFinal: false, timestamp: Date.now(), detectedLanguage: detectedLangName }]);
                        setTimeout(() => handleTranslate(newId, text, targetLanguage, detectedLangName), 50);

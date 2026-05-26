@@ -139,15 +139,6 @@ function getFallbackTranslation(text: string, lang: string): string {
     return fallbackDictionary[targetLangLower][cleanText];
   }
   
-  if (targetLangLower === 'tamil') return `வணக்கம்`;
-  if (targetLangLower === 'hindi') return `नमस्ते`;
-  if (targetLangLower === 'spanish') return `Hola`;
-  if (targetLangLower === 'french') return `Bonjour`;
-  if (targetLangLower === 'german') return `Hallo`;
-  if (targetLangLower === 'japanese') return `こんにちは`;
-  if (targetLangLower === 'chinese') return `你好`;
-  if (targetLangLower === 'malayalam') return `നമസ്കാരം`;
-  
   return `${text}`;
 }
 
@@ -159,85 +150,78 @@ export default async function handler(req: any, res: any) {
 
   try {
     const { text, targetLanguage } = req.body;
+    console.log(`Translate requested for length ${text?.length}, target: ${targetLanguage}`);
     if (!text || !targetLanguage) {
       return res.status(400).json({ error: 'Missing text or targetLanguage' });
     }
 
-    const prompt = `You are a professional real-time translator.
-Translate the following text to ${targetLanguage}. Maintain the original meaning and tone.
-Return ONLY the final translated text, with no markdown formatting.
-Text: "${text}"`;
+    const langMapIso: Record<string, string> = {
+      'tamil': 'ta', 'hindi': 'hi', 'malayalam': 'ml', 'marathi': 'mr',
+      'english': 'en', 'telugu': 'te', 'kannada': 'kn', 'bengali': 'bn',
+      'spanish': 'es', 'french': 'fr', 'german': 'de', 'japanese': 'ja', 
+      'chinese': 'zh-CN', 'chinese (simplified)': 'zh-CN'
+    };
+    const isoTarget = langMapIso[targetLanguage.toLowerCase().trim()] || 'en';
 
     let translatedText = '';
     let usedModel = '';
 
-    // 1. Try Grok (xAI) if configured
-    if (process.env.XAI_API_KEY && process.env.XAI_API_KEY !== 'MY_XAI_API_KEY') {
-      try {
-        const openai = new OpenAI({
-          apiKey: process.env.XAI_API_KEY,
-          baseURL: "https://api.x.ai/v1",
-        });
-        const completion = await openai.chat.completions.create({
-          messages: [
-            { role: "system", content: "You are a professional real-time translator." },
-            { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
-          ],
-          model: "grok-2",
-        });
-        
-        if (completion.choices[0]?.message?.content) {
-          translatedText = completion.choices[0].message.content.trim();
-          usedModel = 'grok';
-        }
-      } catch (grokError) {
-        console.error('Grok translation error:', grokError);
-        // Fall down to Gemini
-      }
-    }
-
-    // 2. Try Gemini if Grok failed or is not configured
-    if (!translatedText && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
-      let ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const fallbackModels = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
-      let modelIndex = 0;
-      let currentModel = fallbackModels[modelIndex];
-      let hasError = false;
-      let response;
-      
-      while (modelIndex < fallbackModels.length) {
-        try {
-          response = await ai.models.generateContent({
-            model: currentModel,
-            contents: prompt,
-          });
-          break; // Success
-        } catch (error: any) {
-          console.error(`Gemini call error on model ${currentModel}:`, error);
-          if (modelIndex < fallbackModels.length - 1) {
-            modelIndex++;
-            currentModel = fallbackModels[modelIndex];
-          } else {
-            hasError = true;
-            break;
+    // Method 1: clients5 google translate (ultra fast, highly accurate)
+    try {
+      const res5 = await fetch(`https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${isoTarget}&q=${encodeURIComponent(text)}`);
+      if (res5.ok) {
+        const data5 = await res5.json();
+        if (data5 && data5[0]) {
+          if (typeof data5[0] === 'string') {
+            translatedText = data5[0];
+          } else if (Array.isArray(data5[0]) && typeof data5[0][0] === 'string') {
+            translatedText = data5[0][0];
+          }
+          if (translatedText) {
+            usedModel = 'google-translate';
           }
         }
       }
+    } catch(e) { 
+      console.error("Chrome GT failed", e); 
+    }
 
-      if (!hasError && response?.text) {
-        translatedText = response.text.trim();
-        usedModel = 'gemini';
+    // Method 2: gtx google translate (robust backup)
+    if (!translatedText) {
+      try {
+        const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
+        if (gtRes.ok) {
+          const gtData = await gtRes.json();
+          if (gtData && gtData[0]) {
+            translatedText = gtData[0].map((x: any) => x[0]).join('');
+            usedModel = 'google-translate';
+          }
+        }
+      } catch (e) { 
+        console.error("GTX fallback failed", e); 
       }
     }
 
-    // 3. Try Offline Fallback if both failed
+    // Method 3: MyMemory free api (backup)
     if (!translatedText) {
-      const simulatedResult = getFallbackTranslation(text, targetLanguage);
-      return res.status(200).json({ 
-        translatedText: simulatedResult,
-        isSimulated: true,
-        note: 'Offline fallback used. Provide a valid XAI_API_KEY or GEMINI_API_KEY.'
-      });
+      try {
+        const mmRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${isoTarget}`);
+        if (mmRes.ok) {
+          const mmData = await mmRes.json();
+          if (mmData && mmData.responseData && mmData.responseData.translatedText) {
+            translatedText = mmData.responseData.translatedText;
+            usedModel = 'mymemory-free';
+          }
+        }
+      } catch(e) { 
+        console.error("MyMemory failed", e); 
+      }
+    }
+
+    // Method 4: Offline dict lookup fallback
+    if (!translatedText) {
+      translatedText = getFallbackTranslation(text, targetLanguage);
+      usedModel = 'offline-dictionary';
     }
 
     return res.status(200).json({ 
