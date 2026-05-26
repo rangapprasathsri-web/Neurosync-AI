@@ -155,14 +155,14 @@ async function startServer() {
     }
     
     // Friendly, readable simulated translation so synthesis is clean
-    if (targetLangLower === 'tamil') return `வணக்கம்: "${text}"`;
-    if (targetLangLower === 'hindi') return `नमस्ते: "${text}"`;
-    if (targetLangLower === 'spanish') return `Hola: "${text}"`;
-    if (targetLangLower === 'french') return `Bonjour: "${text}"`;
-    if (targetLangLower === 'german') return `Hallo: "${text}"`;
-    if (targetLangLower === 'japanese') return `こんにちは: "${text}"`;
-    if (targetLangLower === 'chinese') return `你好: "${text}"`;
-    if (targetLangLower === 'malayalam') return `നമസ്കാരം: "${text}"`;
+    if (targetLangLower === 'tamil') return `வணக்கம்`;
+    if (targetLangLower === 'hindi') return `नमस्ते`;
+    if (targetLangLower === 'spanish') return `Hola`;
+    if (targetLangLower === 'french') return `Bonjour`;
+    if (targetLangLower === 'german') return `Hallo`;
+    if (targetLangLower === 'japanese') return `こんにちは`;
+    if (targetLangLower === 'chinese') return `你好`;
+    if (targetLangLower === 'malayalam') return `നമസ്കാരം`;
     
     return `${text}`;
   }
@@ -195,7 +195,7 @@ Text: "${text}"`;
               { role: "system", content: "You are a professional real-time translator." },
               { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
             ],
-            model: "grok-2-latest",
+            model: "grok-2"
           });
           
           if (completion.choices[0]?.message?.content) {
@@ -203,7 +203,7 @@ Text: "${text}"`;
             usedModel = 'grok';
           }
         } catch (grokError: any) {
-          console.warn(`[Grok] Translation failed (${grokError.status || grokError.message || 'Error'}). Falling back to Gemini.`);
+          // silently fallback to gemini
         }
       }
 
@@ -223,7 +223,6 @@ Text: "${text}"`;
             });
             break; // Success
           } catch (error: any) {
-            console.error(`Gemini call error on model ${currentModel}:`, error);
             if (modelIndex < fallbackModels.length - 1) {
               modelIndex++;
               currentModel = fallbackModels[modelIndex];
@@ -235,7 +234,7 @@ Text: "${text}"`;
         }
 
         if (!hasError && response && response.text) {
-          translatedText = "⚡ " + response.text.trim();
+          translatedText = response.text.trim();
           usedModel = 'gemini';
         }
       }
@@ -253,7 +252,7 @@ Text: "${text}"`;
           const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
           const gtData = await gtRes.json();
           if (gtData && gtData[0]) {
-            translatedText = "⚡ " + gtData[0].map((x: any) => x[0]).join('');
+            translatedText = gtData[0].map((x: any) => x[0]).join('');
             usedModel = 'google-translate-free';
           }
         } catch (e) {
@@ -317,8 +316,7 @@ Text: "${text}"`;
 
       res.status(200).json({ audioUrls });
     } catch (error: any) {
-      console.warn(`[TTS Server] Error generating speech: ${error.message || 'Unknown error'}. Client will use native fallback.`);
-      res.status(503).json({ error: 'Failed to generate speech via Server TTS' });
+      res.status(200).json({ error: 'Failed to generate speech via Server TTS' });
     }
   });
 

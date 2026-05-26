@@ -136,11 +136,16 @@ export const useSpeechSynthesis = () => {
          if (!text) {
              throw new Error("Empty response body from TTS server");
          }
+         let parsed;
          try {
-             return JSON.parse(text);
+             parsed = JSON.parse(text);
          } catch (e) {
              throw new Error("TTS fetch error: Failed to parse JSON: " + text.slice(0, 50));
          }
+         if (parsed.error) {
+             throw new Error("Server TTS Error: " + parsed.error);
+         }
+         return parsed;
       })
       .then(data => {
         if (data.audioUrls && data.audioUrls.length > 0) {
@@ -178,7 +183,7 @@ export const useSpeechSynthesis = () => {
         }
       })
       .catch(err => {
-        console.error("TTS fetch error, falling back to native TTS:", err);
+        console.log("TTS fetch error, falling back to native TTS:", err.message || err);
         // Do native fallback
         runNativeFallback();
       });
