@@ -54,13 +54,15 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [sensitivity, setSensitivity] = useState(0.5);
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [customApiKey, setCustomApiKey] = useState('');
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem('neurosync_sessions');
-      if (stored) {
-        setPastSessions(JSON.parse(stored));
-      }
+      if (stored) setPastSessions(JSON.parse(stored));
+      const storedKey = localStorage.getItem('neurosync_xai_key');
+      if (storedKey) setCustomApiKey(storedKey);
     } catch (e) {}
   }, []);
 
@@ -121,7 +123,7 @@ export default function App() {
       const response = await fetch('/api/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, targetLanguage: fullTargetLang })
+        body: JSON.stringify({ text, targetLanguage: fullTargetLang, customApiKey })
       });
       
       if (!response.ok) {
@@ -307,6 +309,9 @@ export default function App() {
           </div>
           
           <div className="flex items-center space-x-4">
+            <button onClick={() => setShowApiSettings(true)} className="p-2 rounded-lg hover:bg-white/5 transition-colors" title="API Settings">
+              <Settings className="w-5 h-5 text-slate-400" />
+            </button>
             <button onClick={() => setShowHistory(true)} className="p-2 rounded-lg hover:bg-white/5 transition-colors relative" title="View History">
               <History className="w-5 h-5 text-slate-400" />
               {pastSessions.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-500"></span>}
@@ -867,6 +872,56 @@ export default function App() {
             </motion.div>
           </motion.div>
         )}
+
+        {/* API Settings Modal */}
+        {showApiSettings && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0f111a] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/[0.02]">
+                <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-cyan-400" />
+                  API Configuration
+                </h3>
+                <button onClick={() => setShowApiSettings(false)} className="p-1 text-slate-400 hover:text-white rounded-md hover:bg-white/10 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-400">Grok (xAI) API Key (Optional)</label>
+                  <input 
+                    type="password"
+                    value={customApiKey}
+                    onChange={(e) => setCustomApiKey(e.target.value)}
+                    placeholder="xoxb-..."
+                    className="w-full bg-black/50 border border-white/10 text-white px-3 py-2 rounded-lg focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 placeholder-slate-600 text-sm"
+                  />
+                  <p className="text-[10px] text-slate-500 mb-2">
+                    If provided, this key will be used for Grok model (grok-2) translation. This is kept solely in your browser storage.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button 
+                    onClick={() => {
+                      localStorage.setItem('neurosync_xai_key', customApiKey);
+                      setShowApiSettings(false);
+                    }}
+                    className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-medium py-2 rounded-lg transition-colors text-sm shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                  >
+                    Save & Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
       </AnimatePresence>
     </div>
   );

@@ -159,8 +159,8 @@ async function startServer() {
 
   app.post('/api/translate', async (req, res) => {
     try {
-      const { text, targetLanguage } = req.body;
-      console.log(`Translate requested for length ${text?.length}, target: ${targetLanguage}`);
+      const { text, targetLanguage, customApiKey } = req.body;
+      console.log(`Translate requested for length ${text?.length}, target: ${targetLanguage}, hasCustomKey: ${!!customApiKey}`);
       if (!text || !targetLanguage) {
         return res.status(400).json({ error: 'Missing text or targetLanguage' });
       }
@@ -173,27 +173,32 @@ Text: "${text}"`;
       let translatedText = '';
       let usedModel = '';
 
-      // 1. Try Grok (xAI) if configured
-      if (process.env.XAI_API_KEY && process.env.XAI_API_KEY !== 'MY_XAI_API_KEY') {
-        try {
-          const openai = new OpenAI({
-            apiKey: process.env.XAI_API_KEY,
-            baseURL: "https://api.x.ai/v1",
-          });
-          const completion = await openai.chat.completions.create({
-            messages: [
-              { role: "system", content: "You are a professional real-time translator." },
-              { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
-            ],
-            model: "grok-2"
-          });
-          
-          if (completion.choices[0]?.message?.content) {
-            translatedText = completion.choices[0].message.content.trim();
-            usedModel = 'grok';
+      // 1. Try Grok (xAI) if configured or if custom key provided
+      const grokKey = customApiKey || process.env.XAI_API_KEY;
+      if (grokKey && grokKey !== 'MY_XAI_API_KEY') {
+        const xaiModels = ['grok-2-latest', 'grok-beta', 'grok-2', 'grok-2-1212'];
+        for (const model of xaiModels) {
+          try {
+            const openai = new OpenAI({
+              apiKey: grokKey,
+              baseURL: "https://api.x.ai/v1",
+            });
+            const completion = await openai.chat.completions.create({
+              messages: [
+                { role: "system", content: "You are a professional real-time translator." },
+                { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
+              ],
+              model: model
+            });
+            
+            if (completion.choices[0]?.message?.content) {
+              translatedText = completion.choices[0].message.content.trim();
+              usedModel = model;
+              break;
+            }
+          } catch (grokError: any) {
+            console.error(`Grok model ${model} failed`, grokError.message);
           }
-        } catch (grokError: any) {
-          // silently fallback to gemini
         }
       }
 
