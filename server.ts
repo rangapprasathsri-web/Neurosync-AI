@@ -154,16 +154,6 @@ async function startServer() {
       return fallbackDictionary[targetLangLower][cleanText];
     }
     
-    // Friendly, readable simulated translation so synthesis is clean
-    if (targetLangLower === 'tamil') return `வணக்கம்`;
-    if (targetLangLower === 'hindi') return `नमस्ते`;
-    if (targetLangLower === 'spanish') return `Hola`;
-    if (targetLangLower === 'french') return `Bonjour`;
-    if (targetLangLower === 'german') return `Hallo`;
-    if (targetLangLower === 'japanese') return `こんにちは`;
-    if (targetLangLower === 'chinese') return `你好`;
-    if (targetLangLower === 'malayalam') return `നമസ്കാരം`;
-    
     return `${text}`;
   }
 
@@ -241,32 +231,70 @@ Text: "${text}"`;
 
       // 3. Try Auto-Translate Fallback if both failed
       if (!translatedText) {
+        const langMapIso: Record<string, string> = {
+          'tamil': 'ta', 'hindi': 'hi', 'malayalam': 'ml', 'marathi': 'mr',
+          'english': 'en', 'telugu': 'te', 'kannada': 'kn', 'bengali': 'bn',
+          'spanish': 'es', 'french': 'fr', 'german': 'de', 'japanese': 'ja', 'chinese': 'zh-CN'
+        };
+        const isoTarget = langMapIso[targetLanguage.toLowerCase()] || 'en';
+
+        // Method 3.a: clients5 google translate
         try {
-          const langMapIso: Record<string, string> = {
-            'tamil': 'ta', 'hindi': 'hi', 'malayalam': 'ml', 'marathi': 'mr',
-            'english': 'en', 'telugu': 'te', 'kannada': 'kn', 'bengali': 'bn',
-            'spanish': 'es', 'french': 'fr', 'german': 'de', 'japanese': 'ja', 'chinese': 'zh-CN'
-          };
-          const isoTarget = langMapIso[targetLanguage.toLowerCase()] || 'en';
-          
-          const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
-          const gtData = await gtRes.json();
-          if (gtData && gtData[0]) {
-            translatedText = gtData[0].map((x: any) => x[0]).join('');
-            usedModel = 'google-translate-free';
+          const res5 = await fetch(`https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${isoTarget}&q=${encodeURIComponent(text)}`);
+          if (res5.ok) {
+            const data5 = await res5.json();
+            if (data5 && data5[0] && typeof data5[0][0] === 'string') {
+              translatedText = data5[0][0];
+              usedModel = 'google-translate-chrome';
+            }
           }
-        } catch (e) {
-          console.error("Google Translate fallback failed", e);
+        } catch(e) { console.error("Chrome GT failed", e); }
+
+        // Method 3.b: gtx google translate
+        if (!translatedText) {
+          try {
+            const gtRes = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${isoTarget}&dt=t&q=${encodeURIComponent(text)}`);
+            if (gtRes.ok) {
+              const gtData = await gtRes.json();
+              if (gtData && gtData[0]) {
+                translatedText = gtData[0].map((x: any) => x[0]).join('');
+                usedModel = 'google-translate-free';
+              }
+            }
+          } catch (e) { console.error("GTX fallback failed", e); }
+        }
+
+        // Method 3.c: mymemory translate
+        if (!translatedText) {
+          try {
+            const mmRes = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${isoTarget}`);
+            if (mmRes.ok) {
+              const mmData = await mmRes.json();
+              if (mmData && mmData.responseData && mmData.responseData.translatedText) {
+                translatedText = mmData.responseData.translatedText;
+                usedModel = 'mymemory-free';
+              }
+            }
+          } catch(e) { console.error("MyMemory failed", e); }
         }
       }
 
       if (!translatedText) {
         const simulatedResult = getFallbackTranslation(text, targetLanguage);
         return res.json({ 
-          translatedText: `[DIAG]: failed to translate text. Gemini model error check. ` + simulatedResult,
+          translatedText: simulatedResult,
           isSimulated: true,
           note: `All translation API attempts failed.`
         });
+      }
+
+      if (translatedText) {
+        translatedText = translatedText
+          .replace(/^Here is the.*?:\s*/i, '')
+          .replace(/^Sure,.*?:\s*/i, '')
+          .replace(/^Translation:\s*/i, '')
+          .replace(/^"|"$/g, '')
+          .trim();
       }
 
       res.json({ 
@@ -278,7 +306,7 @@ Text: "${text}"`;
       // Ensure zero crash/failure
       const simulatedResult = getFallbackTranslation(req.body?.text || '', req.body?.targetLanguage || 'Tamil');
       res.json({ 
-        translatedText: `[CRASH]: ${error.message} ` + simulatedResult,
+        translatedText: simulatedResult,
         isSimulated: true
       });
     }
