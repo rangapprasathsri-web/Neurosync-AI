@@ -124,9 +124,13 @@ export const useSpeechSynthesis = () => {
         body: JSON.stringify({ text, targetLanguage: activeLang })
       })
       .then(async res => {
+         const contentType = res.headers.get("content-type");
          if (!res.ok) {
             const text = await res.text();
             throw new Error(`HTTP error! status: ${res.status}, body: ${text.slice(0, 50)}`);
+         }
+         if (!contentType || !contentType.includes("application/json")) {
+            throw new Error(`Invalid content type! Expected JSON, got ${contentType}`);
          }
          const text = await res.text();
          if (!text) {

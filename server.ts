@@ -188,7 +188,7 @@ Text: "${text}"`;
         try {
           const openai = new OpenAI({
             apiKey: process.env.XAI_API_KEY,
-            baseURL: "https://api.xai.com/v1",
+            baseURL: "https://api.x.ai/v1",
           });
           const completion = await openai.chat.completions.create({
             messages: [
