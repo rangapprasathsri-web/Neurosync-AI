@@ -139,14 +139,14 @@ function getFallbackTranslation(text: string, lang: string): string {
     return fallbackDictionary[targetLangLower][cleanText];
   }
   
-  if (targetLangLower === 'tamil') return `வணக்கம்: "${text}"`;
-  if (targetLangLower === 'hindi') return `नमस्ते: "${text}"`;
-  if (targetLangLower === 'spanish') return `Hola: "${text}"`;
-  if (targetLangLower === 'french') return `Bonjour: "${text}"`;
-  if (targetLangLower === 'german') return `Hallo: "${text}"`;
-  if (targetLangLower === 'japanese') return `こんにちは: "${text}"`;
-  if (targetLangLower === 'chinese') return `你好: "${text}"`;
-  if (targetLangLower === 'malayalam') return `നമസ്കാരം: "${text}"`;
+  if (targetLangLower === 'tamil') return `வணக்கம்`;
+  if (targetLangLower === 'hindi') return `नमस्ते`;
+  if (targetLangLower === 'spanish') return `Hola`;
+  if (targetLangLower === 'french') return `Bonjour`;
+  if (targetLangLower === 'german') return `Hallo`;
+  if (targetLangLower === 'japanese') return `こんにちは`;
+  if (targetLangLower === 'chinese') return `你好`;
+  if (targetLangLower === 'malayalam') return `നമസ്കാരം`;
   
   return `${text}`;
 }
@@ -176,14 +176,14 @@ Text: "${text}"`;
       try {
         const openai = new OpenAI({
           apiKey: process.env.XAI_API_KEY,
-          baseURL: "https://api.xai.com/v1",
+          baseURL: "https://api.x.ai/v1",
         });
         const completion = await openai.chat.completions.create({
           messages: [
             { role: "system", content: "You are a professional real-time translator." },
             { role: "user", content: `Translate the following text to ${targetLanguage}. Maintain the original meaning and tone. Return ONLY the final translated text, with no markdown formatting.\nText: "${text}"` }
           ],
-          model: "grok-2-latest",
+          model: "grok-2",
         });
         
         if (completion.choices[0]?.message?.content) {
