@@ -75,22 +75,11 @@ export const useSpeechRecognition = (language: string, onFinalTranscript: (text:
     rec.onresult = (event: any) => {
       let currentInterim = '';
       let finalTranscriptChunk = '';
-      
-      // Calculate confidence threshold: sensitivity 1 = threshold 0, sensitivity 0 = threshold 0.9
-      const confidenceThreshold = (1 - sensitivityRef.current) * 0.9;
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i][0];
-        // Only accept if confidence is above the threshold, or there is no confidence scoring available
-        // Sometimes Chrome gives 0.0 for interim, or Safari lacks it. Only filter if we have a valid non-zero confidence score that falls below threshold.
         if (event.results[i].isFinal) {
-          const confidence = result.confidence;
-          // If confidence is tightly given and is too low, we filter it. (0 is often a fallback for "I don't know")
-          if (typeof confidence === 'number' && confidence > 0 && confidence < confidenceThreshold) {
-             console.log(`Filtered out low confidence final transcript: "${result.transcript}" (Conf: ${confidence.toFixed(2)} < ${confidenceThreshold.toFixed(2)})`);
-          } else {
-             finalTranscriptChunk += result.transcript;
-          }
+          finalTranscriptChunk += result.transcript;
         } else {
           currentInterim += result.transcript;
         }

@@ -80,7 +80,7 @@ export default function App() {
   const [languages, setLanguages] = useState(INITIAL_LANGUAGES);
   const [targetLanguage, setTargetLanguage] = useState('Tamil');
   const [inputLanguage, setInputLanguage] = useState('');
-  const [autoTranslate, setAutoTranslate] = useState(false);
+  const [autoTranslate, setAutoTranslate] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [autoSpeak, setAutoSpeak] = useState(true);
   const [sensitivity, setSensitivity] = useState(0.5);
