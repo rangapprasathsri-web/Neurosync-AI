@@ -14,7 +14,14 @@ async function startServer() {
 
   let ai: GoogleGenAI | null = null;
   if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
-    ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    ai = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
 
   const fallbackDictionary: Record<string, Record<string, string>> = {
@@ -176,24 +183,52 @@ async function startServer() {
       let translatedText = '';
       let usedModel = '';
 
-      // Method 1: clients5 google translate (ultra fast, highly accurate)
-      try {
-        const res5 = await fetch(`https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${isoTarget}&q=${encodeURIComponent(text)}`);
-        if (res5.ok) {
-          const data5 = await res5.json();
-          if (data5 && data5[0]) {
-            if (typeof data5[0] === 'string') {
-              translatedText = data5[0];
-            } else if (Array.isArray(data5[0]) && typeof data5[0][0] === 'string') {
-              translatedText = data5[0][0];
+      // Method 0: Official Gemini 3.5 Flash API (highly accurate, contextual)
+      if (ai) {
+        try {
+          const geminePrompt = `You are a professional real-time translator.
+Translate the following text to ${targetLanguage}. Maintain the original meaning and tone.
+Return ONLY the final translated text, with absolutely no markdown formatting, no outer quotes, and no preambles.
+Text to translate: "${text}"`;
+
+          const response = await ai.models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: geminePrompt,
+          });
+          
+          if (response?.text) {
+            translatedText = response.text.trim();
+            // Remove lingering wrap quotes that LLMs sometimes output
+            if (translatedText.startsWith('"') && translatedText.endsWith('"')) {
+              translatedText = translatedText.substring(1, translatedText.length - 1);
             }
-            if (translatedText) {
-              usedModel = 'google-translate';
+            usedModel = 'gemini';
+          }
+        } catch (geminiError: any) {
+          console.error('Gemini translation helper error:', geminiError.message || geminiError);
+        }
+      }
+
+      // Method 1: clients5 google translate (ultra fast, highly accurate)
+      if (!translatedText) {
+        try {
+          const res5 = await fetch(`https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=${isoTarget}&q=${encodeURIComponent(text)}`);
+          if (res5.ok) {
+            const data5 = await res5.json();
+            if (data5 && data5[0]) {
+              if (typeof data5[0] === 'string') {
+                translatedText = data5[0];
+              } else if (Array.isArray(data5[0]) && typeof data5[0][0] === 'string') {
+                translatedText = data5[0][0];
+              }
+              if (translatedText) {
+                usedModel = 'google-translate';
+              }
             }
           }
+        } catch(e) { 
+          console.error("Chrome GT failed", e); 
         }
-      } catch(e) { 
-        console.error("Chrome GT failed", e); 
       }
 
       // Method 2: gtx google translate (robust backup)
